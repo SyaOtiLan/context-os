@@ -9,7 +9,7 @@ def test_cli_home_command(capsys) -> None:
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert "Personal Context OS" in captured.out
+    assert "ContextOS" in captured.out
     assert "Counts:" in captured.out
 
 

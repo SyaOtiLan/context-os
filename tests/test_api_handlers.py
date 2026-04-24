@@ -25,7 +25,7 @@ def test_health_handler_returns_basic_status() -> None:
     response = health.health()
 
     assert response.ok is True
-    assert response.app == "Personal Context OS"
+    assert response.app == "ContextOS"
 
 
 def test_profile_handlers_round_trip() -> None:

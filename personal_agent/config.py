@@ -7,7 +7,7 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class Settings:
-    app_name: str = "Personal Context OS"
+    app_name: str = "ContextOS"
     db_path: Path = Path(os.getenv("PCOS_DB_PATH", "data/app.db"))
     debug: bool = os.getenv("PCOS_DEBUG", "false").lower() == "true"
     github_api_base_url: str = os.getenv("PCOS_GITHUB_API_BASE_URL", "https://api.github.com")

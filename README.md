@@ -1,6 +1,6 @@
-# Personal Context OS
+# ContextOS
 
-Personal Context OS is a local-first backend for turning personal facts, projects, artifacts, and goals into actionable context.
+ContextOS is a local-first personal context system for turning facts, projects, artifacts, and goals into actionable recommendations.
 
 The current MVP focuses on one practical workflow:
 
@@ -116,6 +116,8 @@ GitHub sync can run without a token for light usage, but authenticated requests 
 
 LLM configuration is only required for `/radar/analyze` and `/radar/run`.
 
+The environment variable prefix is still `PCOS_` for now.
+
 ## API Surface
 
 Core:
@@ -222,6 +224,12 @@ python -m personal_agent
 or after editable install:
 
 ```bash
+contextos
+```
+
+The old short alias is also available:
+
+```bash
 pcos
 ```
 
@@ -257,7 +265,7 @@ pyright
 Suggested server layout:
 
 ```text
-/opt/personal-context-os/
+/opt/context-os/
   personal_agent/
   scripts/
   data/
@@ -274,7 +282,7 @@ python3 -m venv .venv
 
 Then adapt:
 
-- [`deploy/systemd/personal-context-os.service`](./deploy/systemd/personal-context-os.service)
+- [`deploy/systemd/context-os.service`](./deploy/systemd/context-os.service)
 
 ## Design Notes
 

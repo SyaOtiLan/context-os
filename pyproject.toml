@@ -1,5 +1,5 @@
 [project]
-name = "personal-context-os"
+name = "context-os"
 version = "0.1.0"
 description = "Local-first personal context system for profile-driven issue discovery"
 requires-python = ">=3.10"
@@ -19,6 +19,7 @@ dev = [
 ]
 
 [project.scripts]
+contextos = "personal_agent.cli:main"
 pcos = "personal_agent.cli:main"
 
 [build-system]

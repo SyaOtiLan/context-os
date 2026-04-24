@@ -1,2 +1,1 @@
-"""Personal Context OS package."""
-
+"""ContextOS package."""

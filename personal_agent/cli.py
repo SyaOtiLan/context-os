@@ -462,8 +462,8 @@ def cmd_service_probe(args: argparse.Namespace, ctx: CLIContext) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="pcos",
-        description="Personal Context OS CLI",
+        prog="contextos",
+        description="ContextOS CLI",
     )
     parser.set_defaults(func=cmd_home)
 
