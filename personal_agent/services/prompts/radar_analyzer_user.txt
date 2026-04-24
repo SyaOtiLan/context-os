@@ -1,0 +1,14 @@
+仓库：$repo
+Issue 编号：$issue_number
+标题：$title
+链接：$url
+标签：$labels
+Assignees：$assignees
+规则过滤信号：$filter_reason_codes
+
+Issue 正文：
+$body
+
+请基于 system prompt 中的开发者画像，判断这个 issue 现在是否适合他来做。
+再次强调：`why_fit`、`why_not_fit`、`likely_blockers`、`first_step` 必须使用简体中文，即使 issue 原文是英文。
+只返回 JSON。
