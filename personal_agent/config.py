@@ -18,6 +18,9 @@ class Settings:
     llm_api_base: str | None = os.getenv("PCOS_LLM_API_BASE")
     llm_api_key: str | None = os.getenv("PCOS_LLM_API_KEY")
     llm_model: str | None = os.getenv("PCOS_LLM_MODEL")
+    llm_wire_api: str = os.getenv("PCOS_LLM_WIRE_API", "chat_completions")
+    llm_reasoning_effort: str | None = os.getenv("PCOS_LLM_REASONING_EFFORT")
+    llm_disable_response_storage: bool = os.getenv("PCOS_LLM_DISABLE_RESPONSE_STORAGE", "true").lower() == "true"
     llm_timeout_seconds: int = int(os.getenv("PCOS_LLM_TIMEOUT_SECONDS", "60"))
 
 

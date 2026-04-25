@@ -5,7 +5,7 @@ ContextOS is a local-first personal context system for turning facts, projects, 
 The current MVP focuses on one practical workflow:
 
 ```text
-structured personal context -> derived profile -> GitHub issue sync/filter/analyze -> recommended opportunities
+raw evidence -> AI extraction candidates -> human confirmation -> derived profile -> GitHub issue sync/filter/analyze -> recommended opportunities
 ```
 
 It is not a companion chatbot and it does not depend on a vector database. The core is structured data, explicit rules, SQLite storage, and a small AI layer for issue analysis.
@@ -17,6 +17,8 @@ This repo is an early but runnable MVP.
 Implemented:
 
 - FastAPI backend backed by SQLite
+- raw evidence storage
+- review-before-write AI ingestion candidates
 - profile facts and preferences
 - rule-based derived profile snapshots
 - projects, artifacts, notes, opportunities, tasks, and policies
@@ -98,6 +100,8 @@ Open the API docs:
 http://127.0.0.1:5000/docs
 ```
 
+The docs page can be used as the first manual UI for the ingestion flow: paste raw text into `/ingest/extract`, review `/ingest/candidates`, then apply or reject candidates.
+
 ## Configuration
 
 The default database path is `data/app.db`.
@@ -110,13 +114,25 @@ export PCOS_GITHUB_TOKEN=...
 export PCOS_LLM_API_BASE=https://api.openai.com/v1
 export PCOS_LLM_API_KEY=...
 export PCOS_LLM_MODEL=...
+export PCOS_LLM_WIRE_API=chat_completions
 ```
 
 GitHub sync can run without a token for light usage, but authenticated requests are more reliable.
 
-LLM configuration is only required for `/radar/analyze` and `/radar/run`.
+LLM configuration is required for `/ingest/extract`, `/radar/analyze`, and `/radar/run`.
 
 The environment variable prefix is still `PCOS_` for now.
+
+For OpenAI-compatible Responses API providers, use:
+
+```bash
+export PCOS_LLM_API_BASE=https://example.com/v1
+export PCOS_LLM_API_KEY=...
+export PCOS_LLM_MODEL=...
+export PCOS_LLM_WIRE_API=responses
+export PCOS_LLM_REASONING_EFFORT=xhigh
+export PCOS_LLM_DISABLE_RESPONSE_STORAGE=true
+```
 
 ## API Surface
 
@@ -124,6 +140,13 @@ Core:
 
 - `GET /health`
 - `GET /overview`
+
+Ingestion:
+
+- `POST /ingest/extract`
+- `GET /ingest/candidates`
+- `POST /ingest/candidates/{candidate_id}/apply`
+- `POST /ingest/candidates/{candidate_id}/reject`
 
 Profile:
 
@@ -169,12 +192,24 @@ Radar:
 
 ## Example Radar Flow
 
-Create or update profile context first:
+Extract candidates from raw evidence:
 
 ```bash
-curl -X POST http://127.0.0.1:5000/profile/facts \
+curl -X POST http://127.0.0.1:5000/ingest/extract \
   -H 'content-type: application/json' \
-  -d '{"category":"goal","key":"current_focus","value":"Build practical AI developer tools around personal context and GitHub issue discovery."}'
+  -d '{"source_type":"manual_text","content":"I am building ContextOS, a personal context system for profile-driven GitHub issue discovery."}'
+```
+
+Review pending candidates:
+
+```bash
+curl 'http://127.0.0.1:5000/ingest/candidates?status=pending'
+```
+
+Apply a confirmed candidate:
+
+```bash
+curl -X POST http://127.0.0.1:5000/ingest/candidates/1/apply
 ```
 
 Refresh the derived profile:
@@ -287,6 +322,7 @@ Then adapt:
 ## Design Notes
 
 - SQLite is the default storage layer.
+- AI ingestion is review-before-write: extraction creates candidates, not final facts.
 - Raw facts and derived profile snapshots are kept separate.
 - Opportunities are treated as top-level inputs, not profile evidence by default.
 - The radar pipeline uses GitHub structured fields first, then limited text heuristics.

@@ -10,6 +10,8 @@ from personal_agent.models import (
     ArtifactCreate,
     DerivedProfileSnapshot,
     DerivedProfileSnapshotCreate,
+    ExtractionCandidate,
+    ExtractionCandidateCreate,
     GitHubIssue,
     GitHubIssueAnalysis,
     GitHubIssueAnalysisCreate,
@@ -31,6 +33,8 @@ from personal_agent.models import (
     ProfileFactCreate,
     ProfilePreference,
     ProfilePreferenceCreate,
+    RawEvidence,
+    RawEvidenceCreate,
     Service,
     ServiceCheck,
     ServiceCheckCreate,
@@ -108,6 +112,18 @@ def _row_to_profile_fact(row: Row) -> ProfileFact:
 
 def _row_to_preference(row: Row) -> ProfilePreference:
     return ProfilePreference(**dict(row))
+
+
+def _row_to_raw_evidence(row: Row) -> RawEvidence:
+    data = dict(row)
+    data["metadata"] = _json_loads(data.pop("metadata_json")) or {}
+    return RawEvidence(**data)
+
+
+def _row_to_extraction_candidate(row: Row) -> ExtractionCandidate:
+    data = dict(row)
+    data["payload"] = _json_loads(data.pop("payload_json")) or {}
+    return ExtractionCandidate(**data)
 
 
 def _row_to_note(row: Row) -> Note:
@@ -192,6 +208,142 @@ def _row_to_service_check(row: Row) -> ServiceCheck:
 
 
 class Repository:
+    def create_raw_evidence(self, payload: RawEvidenceCreate) -> RawEvidence:
+        with get_connection() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO raw_evidence (source_type, source_uri, content, metadata_json)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    payload.source_type,
+                    payload.source_uri,
+                    payload.content,
+                    json.dumps(payload.metadata),
+                ),
+            )
+            row = connection.execute(
+                "SELECT * FROM raw_evidence WHERE id = ?",
+                (cursor.lastrowid,),
+            ).fetchone()
+        return _row_to_raw_evidence(row)
+
+    def list_raw_evidence(self, limit: int = 20) -> list[RawEvidence]:
+        query = "SELECT * FROM raw_evidence ORDER BY created_at DESC, id DESC"
+        params: tuple[object, ...] = ()
+        if limit:
+            query += " LIMIT ?"
+            params = (limit,)
+        with get_connection() as connection:
+            rows = connection.execute(query, params).fetchall()
+        return [_row_to_raw_evidence(row) for row in rows]
+
+    def create_extraction_candidate(
+        self,
+        payload: ExtractionCandidateCreate,
+    ) -> ExtractionCandidate:
+        with get_connection() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO extraction_candidates (
+                    raw_evidence_id, kind, payload_json, confidence, reason, evidence_quote
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    payload.raw_evidence_id,
+                    payload.kind,
+                    json.dumps(payload.payload),
+                    payload.confidence,
+                    payload.reason,
+                    payload.evidence_quote,
+                ),
+            )
+            row = connection.execute(
+                "SELECT * FROM extraction_candidates WHERE id = ?",
+                (cursor.lastrowid,),
+            ).fetchone()
+        return _row_to_extraction_candidate(row)
+
+    def get_extraction_candidate(
+        self,
+        candidate_id: int,
+    ) -> ExtractionCandidate | None:
+        with get_connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM extraction_candidates WHERE id = ?",
+                (candidate_id,),
+            ).fetchone()
+        return _row_to_extraction_candidate(row) if row else None
+
+    def list_extraction_candidates(
+        self,
+        status: str | None = None,
+        kind: str | None = None,
+        limit: int = 50,
+    ) -> list[ExtractionCandidate]:
+        query = "SELECT * FROM extraction_candidates"
+        conditions: list[str] = []
+        params: list[object] = []
+        if status:
+            conditions.append("status = ?")
+            params.append(status)
+        if kind:
+            conditions.append("kind = ?")
+            params.append(kind)
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        query += " ORDER BY created_at DESC, id DESC"
+        if limit:
+            query += " LIMIT ?"
+            params.append(limit)
+        with get_connection() as connection:
+            rows = connection.execute(query, tuple(params)).fetchall()
+        return [_row_to_extraction_candidate(row) for row in rows]
+
+    def mark_extraction_candidate_applied(
+        self,
+        candidate_id: int,
+        entity_type: str,
+        entity_id: int,
+    ) -> ExtractionCandidate:
+        with get_connection() as connection:
+            connection.execute(
+                """
+                UPDATE extraction_candidates
+                SET status = 'applied',
+                    applied_entity_type = ?,
+                    applied_entity_id = ?,
+                    applied_at = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (entity_type, entity_id, candidate_id),
+            )
+            row = connection.execute(
+                "SELECT * FROM extraction_candidates WHERE id = ?",
+                (candidate_id,),
+            ).fetchone()
+        return _row_to_extraction_candidate(row)
+
+    def reject_extraction_candidate(self, candidate_id: int) -> ExtractionCandidate:
+        with get_connection() as connection:
+            connection.execute(
+                """
+                UPDATE extraction_candidates
+                SET status = 'rejected',
+                    rejected_at = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (candidate_id,),
+            )
+            row = connection.execute(
+                "SELECT * FROM extraction_candidates WHERE id = ?",
+                (candidate_id,),
+            ).fetchone()
+        return _row_to_extraction_candidate(row)
+
     def upsert_github_issue(self, payload: GitHubIssueCreate) -> GitHubIssue:
         with get_connection() as connection:
             connection.execute(
@@ -580,6 +732,14 @@ class Repository:
                 "SELECT * FROM projects ORDER BY updated_at DESC, id DESC"
             ).fetchall()
         return [_row_to_project(row) for row in rows]
+
+    def get_project_by_slug(self, slug: str) -> Project | None:
+        with get_connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM projects WHERE slug = ?",
+                (slug,),
+            ).fetchone()
+        return _row_to_project(row) if row else None
 
     def list_recent_projects(self, limit: int = 5) -> list[Project]:
         with get_connection() as connection:

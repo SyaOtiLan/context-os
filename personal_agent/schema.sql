@@ -41,6 +41,41 @@ CREATE TABLE IF NOT EXISTS profile_preferences (
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS raw_evidence (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_type TEXT NOT NULL,
+    source_uri TEXT,
+    content TEXT NOT NULL,
+    metadata_json TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_raw_evidence_source_type
+ON raw_evidence(source_type, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS extraction_candidates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    raw_evidence_id INTEGER NOT NULL REFERENCES raw_evidence(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    confidence REAL NOT NULL DEFAULT 1.0,
+    reason TEXT,
+    evidence_quote TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    applied_entity_type TEXT,
+    applied_entity_id INTEGER,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    applied_at TEXT,
+    rejected_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_extraction_candidates_status
+ON extraction_candidates(status, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_extraction_candidates_raw_evidence_id
+ON extraction_candidates(raw_evidence_id);
+
 CREATE TABLE IF NOT EXISTS notes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     kind TEXT NOT NULL,

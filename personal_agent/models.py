@@ -53,6 +53,63 @@ class ProfileSummary(BaseModel):
     preferences: list[ProfilePreference]
 
 
+class RawEvidenceCreate(BaseModel):
+    source_type: str
+    source_uri: str | None = None
+    content: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class RawEvidence(BaseModel):
+    id: int
+    source_type: str
+    source_uri: str | None = None
+    content: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: str
+
+
+class ExtractionCandidateCreate(BaseModel):
+    raw_evidence_id: int
+    kind: str
+    payload: dict[str, Any]
+    confidence: float = 1.0
+    reason: str | None = None
+    evidence_quote: str | None = None
+
+
+class ExtractionCandidate(BaseModel):
+    id: int
+    raw_evidence_id: int
+    kind: str
+    payload: dict[str, Any]
+    confidence: float
+    reason: str | None = None
+    evidence_quote: str | None = None
+    status: str
+    applied_entity_type: str | None = None
+    applied_entity_id: int | None = None
+    created_at: str
+    updated_at: str
+    applied_at: str | None = None
+    rejected_at: str | None = None
+
+
+class IngestExtractRequest(RawEvidenceCreate):
+    pass
+
+
+class IngestExtractResponse(BaseModel):
+    evidence: RawEvidence
+    candidates: list[ExtractionCandidate] = Field(default_factory=list)
+
+
+class IngestApplyResponse(BaseModel):
+    candidate: ExtractionCandidate
+    entity_type: str
+    entity_id: int
+
+
 class DerivedProfile(BaseModel):
     generated_at: str
     declared_facts: list[str] = Field(default_factory=list)

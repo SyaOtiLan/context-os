@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from personal_agent.api.artifacts import router as artifacts_router
 from personal_agent.api.health import router as health_router
+from personal_agent.api.ingest import router as ingest_router
 from personal_agent.api.notes import router as notes_router
 from personal_agent.api.overview import router as overview_router
 from personal_agent.api.ops import router as ops_router
@@ -26,6 +27,7 @@ def on_startup() -> None:
 
 
 app.include_router(health_router)
+app.include_router(ingest_router)
 app.include_router(profile_router)
 app.include_router(overview_router)
 app.include_router(projects_router)
