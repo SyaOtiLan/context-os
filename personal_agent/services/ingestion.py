@@ -84,6 +84,27 @@ class IngestionService:
         candidates = self._extract_candidates(evidence_id=evidence.id, content=payload.content)
         return IngestExtractResponse(evidence=evidence, candidates=candidates)
 
+    def extract_from_evidence(
+        self,
+        evidence_id: int,
+        *,
+        skip_existing: bool = True,
+    ) -> IngestExtractResponse:
+        evidence = self.repository.get_raw_evidence(evidence_id)
+        if evidence is None:
+            raise RepositoryNotFoundError("raw_evidence", evidence_id)
+
+        if skip_existing:
+            existing = self.repository.list_extraction_candidates(
+                raw_evidence_id=evidence.id,
+                limit=1,
+            )
+            if existing:
+                return IngestExtractResponse(evidence=evidence, candidates=[])
+
+        candidates = self._extract_candidates(evidence_id=evidence.id, content=evidence.content)
+        return IngestExtractResponse(evidence=evidence, candidates=candidates)
+
     def list_candidates(
         self,
         status: str | None = None,

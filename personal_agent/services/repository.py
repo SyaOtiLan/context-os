@@ -238,6 +238,31 @@ class Repository:
             rows = connection.execute(query, params).fetchall()
         return [_row_to_raw_evidence(row) for row in rows]
 
+    def get_raw_evidence(self, evidence_id: int) -> RawEvidence | None:
+        with get_connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM raw_evidence WHERE id = ?",
+                (evidence_id,),
+            ).fetchone()
+        return _row_to_raw_evidence(row) if row else None
+
+    def get_raw_evidence_by_source(
+        self,
+        source_type: str,
+        source_uri: str,
+    ) -> RawEvidence | None:
+        with get_connection() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM raw_evidence
+                WHERE source_type = ? AND source_uri = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (source_type, source_uri),
+            ).fetchone()
+        return _row_to_raw_evidence(row) if row else None
+
     def create_extraction_candidate(
         self,
         payload: ExtractionCandidateCreate,
@@ -280,6 +305,7 @@ class Repository:
         self,
         status: str | None = None,
         kind: str | None = None,
+        raw_evidence_id: int | None = None,
         limit: int = 50,
     ) -> list[ExtractionCandidate]:
         query = "SELECT * FROM extraction_candidates"
@@ -291,6 +317,9 @@ class Repository:
         if kind:
             conditions.append("kind = ?")
             params.append(kind)
+        if raw_evidence_id is not None:
+            conditions.append("raw_evidence_id = ?")
+            params.append(raw_evidence_id)
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
         query += " ORDER BY created_at DESC, id DESC"

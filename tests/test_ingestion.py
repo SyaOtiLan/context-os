@@ -79,6 +79,36 @@ def test_extract_stores_raw_evidence_and_pending_candidates(repository: Reposito
     assert all(candidate.status == "pending" for candidate in result.candidates)
 
 
+def test_extract_from_existing_raw_evidence(repository: Repository) -> None:
+    evidence = repository.create_raw_evidence(
+        RawEvidenceCreate(
+            source_type="manual_text",
+            content="我 ACM 背景，最近在做 ContextOS。",
+        )
+    )
+    service = IngestionService(repository, FakeLLMService())
+
+    result = service.extract_from_evidence(evidence.id)
+
+    assert result.evidence.id == evidence.id
+    assert [candidate.kind for candidate in result.candidates] == ["profile_fact", "project"]
+
+
+def test_extract_from_existing_raw_evidence_skips_existing_candidates(
+    repository: Repository,
+) -> None:
+    evidence = repository.create_raw_evidence(
+        RawEvidenceCreate(
+            source_type="manual_text",
+            content="我 ACM 背景，最近在做 ContextOS。",
+        )
+    )
+    service = IngestionService(repository, FakeLLMService())
+
+    assert len(service.extract_from_evidence(evidence.id).candidates) == 2
+    assert service.extract_from_evidence(evidence.id).candidates == []
+
+
 def test_apply_profile_fact_candidate_writes_formal_table(repository: Repository) -> None:
     service = IngestionService(repository, FakeLLMService())
     result = service.extract(
