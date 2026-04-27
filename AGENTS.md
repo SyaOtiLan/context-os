@@ -113,6 +113,13 @@ Send pending email outbox items:
 python3 scripts/send_outbox.py
 ```
 
+Run the full radar job for scheduling:
+
+```bash
+python3 scripts/run_radar_job.py --repo owner/repo --analysis-limit 5
+python3 scripts/run_radar_job.py --repo owner/repo --analysis-limit 5 --send
+```
+
 Run the API:
 
 ```bash

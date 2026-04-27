@@ -70,6 +70,7 @@ scripts/
   extract_evidence_candidates.py
   review_candidates.py
   enqueue_radar_digest.py
+  run_radar_job.py
   send_outbox.py
   bootstrap_venv.sh
 tests/          pytest coverage
@@ -271,6 +272,13 @@ Queue and send a digest email locally:
 ```bash
 python3 scripts/enqueue_radar_digest.py --repo owner/repo
 python3 scripts/send_outbox.py
+```
+
+Run the whole radar job locally:
+
+```bash
+python3 scripts/run_radar_job.py --repo owner/repo --analysis-limit 5
+python3 scripts/run_radar_job.py --repo owner/repo --analysis-limit 5 --send
 ```
 
 ## CLI
