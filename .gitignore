@@ -4,6 +4,7 @@ __pycache__/
 .mypy_cache/
 .venv/
 .env
+.codex
 nvim.log
 data/*.db
 data/*.db-shm
