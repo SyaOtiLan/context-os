@@ -1,69 +1,93 @@
 # ContextOS
 
-ContextOS is a local-first personal context system that turns evidence about your
-projects, skills, goals, and work history into actionable recommendations.
+Most GitHub issue finders ask:
 
-The current MVP is built around one concrete workflow:
+```text
+Which issues are open?
+```
+
+ContextOS asks a more useful question:
+
+```text
+Which issues are actually worth doing for me?
+```
+
+It builds a reviewed personal profile from your projects, notes, resume, articles,
+and other evidence, then uses that profile to scan GitHub issues and email you a
+digest of opportunities that match your current goals.
+
+## Example Output
+
+```text
+[ContextOS Radar] vllm-project/vllm: 6 digest items
+
+Watchlist
+- vllm-project/vllm#XXXXX [7/10, medium] Improve scheduler test coverage
+  Why fit: matches Python, AI infrastructure, and test-focused contribution goals.
+  Why not: requires understanding part of the scheduling path first.
+  First step: reproduce the issue and inspect the existing scheduler tests.
+
+Screened out
+- vllm-project/vllm#YYYYY Large distributed runtime refactor
+  Reasons: already assigned, large refactor, not a good first contribution.
+```
+
+The point is not to let an agent randomly browse GitHub. The point is to turn
+your own context into a practical filter for what to work on next.
+
+## What It Does
+
+- stores raw evidence about you and your work
+- asks an LLM to extract reviewable profile/project/artifact candidates
+- requires human confirmation before writing final profile data
+- derives a compact profile from confirmed facts
+- syncs and filters GitHub issues using structured fields first
+- uses the derived profile to analyze issue fit
+- queues and sends an email digest through SMTP
+
+## Why Not Just Use an Agent?
+
+ContextOS is deliberately not an autonomous multi-agent system.
+
+The current workflow is a controlled pipeline:
 
 ```text
 raw evidence
--> AI extraction candidates
+-> extraction candidates
 -> human review
 -> structured profile/projects/artifacts
 -> derived profile
 -> GitHub issue radar
--> digest email
+-> email digest
 ```
 
-It is not a companion chatbot, not a generic agent framework, and not a vector
-database demo. The core idea is simpler: keep personal context structured,
-reviewable, and useful for real decisions.
-
-## Why This Exists
-
-Finding GitHub issues to work on is not just a search problem. The useful
-question is:
-
-```text
-Which issue is worth doing for me, given what I have built, learned, and want to improve?
-```
-
-ContextOS answers that by separating evidence from derived conclusions:
-
-- store raw evidence first, such as resumes, project notes, repo summaries, and articles
-- let an LLM extract reviewable candidates
-- confirm or reject candidates before they become official profile data
-- generate a derived profile from confirmed facts and projects
-- use that profile to analyze GitHub issues and send a digest
-
-The system is intentionally conservative: AI output is useful, but it is not the
-source of truth until reviewed.
+LLM output never writes directly into the final profile. It creates candidates
+that can be applied or rejected. This keeps the system inspectable and prevents a
+bad extraction from silently polluting future recommendations.
 
 ## Current Status
 
-This is an early but runnable MVP. It has been deployed and used as a replacement
-for a standalone IssueRadar workflow.
+ContextOS is an early but runnable MVP. It has already replaced a standalone
+IssueRadar workflow for scheduled GitHub issue digests.
 
 Implemented:
 
 - SQLite-backed FastAPI service
-- raw evidence storage
-- review-before-write extraction candidates
+- raw evidence and review-before-write extraction candidates
 - profile facts, preferences, projects, artifacts, notes, opportunities, tasks, and policies
-- rule-based derived profile snapshots
+- derived profile snapshots
 - GitHub issue sync, filtering, LLM analysis, and digest generation
 - notification outbox and SMTP email sender
-- local operational scripts for ingestion, review, radar jobs, and email sending
+- operational scripts for ingestion, review, radar jobs, and email sending
 - `AGENTS.md` for coding agents and maintainers
-- pytest coverage for repository, API handlers, ingestion, profile derivation, radar, notifications, and scripts
+- pytest coverage across repository, API handlers, ingestion, profile derivation, radar, notifications, and scripts
 
 Not the focus yet:
 
 - polished frontend
 - multi-user hosting
-- Slack/webhook output
 - vector database/RAG
-- autonomous multi-agent behavior
+- autonomous agent behavior
 
 ## Quick Start
 
@@ -79,7 +103,7 @@ python3 scripts/init_db.py
 python3 -m pytest -q
 ```
 
-Start the API server:
+Start the API:
 
 ```bash
 uvicorn personal_agent.main:app --host 0.0.0.0 --port 5000
@@ -94,65 +118,15 @@ http://127.0.0.1:5000/docs
 If you use a coding agent to set up the repository, ask it to read
 [`AGENTS.md`](./AGENTS.md) first.
 
-## Configuration
+## Core Commands
 
-The default local database is:
-
-```text
-data/app.db
-```
-
-Configuration is read from environment variables and from `.env`. Shell
-environment variables take precedence over `.env`.
-
-Minimal local config:
-
-```bash
-PCOS_DB_PATH=data/app.db
-```
-
-LLM config is required for candidate extraction and issue analysis:
-
-```bash
-PCOS_LLM_API_BASE=https://api.openai.com/v1
-PCOS_LLM_API_KEY=...
-PCOS_LLM_MODEL=gpt-4.1
-PCOS_LLM_WIRE_API=responses
-PCOS_LLM_REASONING_EFFORT=low
-PCOS_LLM_DISABLE_RESPONSE_STORAGE=true
-```
-
-GitHub token is optional but recommended:
-
-```bash
-PCOS_GITHUB_TOKEN=...
-PCOS_GITHUB_ONLY_PRIORITY_LABELS=true
-PCOS_GITHUB_MAX_ISSUE_STALENESS_DAYS=30
-```
-
-SMTP config is required only if you want digest emails:
-
-```bash
-PCOS_SMTP_HOST=smtp.example.com
-PCOS_SMTP_PORT=587
-PCOS_SMTP_USERNAME=...
-PCOS_SMTP_PASSWORD=...
-PCOS_SMTP_FROM=contextos@example.com
-PCOS_SMTP_TO=you@example.com
-PCOS_SMTP_USE_TLS=true
-```
-
-Do not commit `.env`, local databases, or private evidence.
-
-## Core Workflows
-
-Import cleaned private evidence:
+Import cleaned evidence:
 
 ```bash
 python3 scripts/import_private_evidence.py
 ```
 
-Extract candidates from existing raw evidence:
+Extract reviewable candidates:
 
 ```bash
 python3 scripts/extract_evidence_candidates.py
@@ -167,7 +141,7 @@ python3 scripts/review_candidates.py apply 1
 python3 scripts/review_candidates.py reject 1
 ```
 
-Run a full radar job:
+Run a radar job:
 
 ```bash
 python3 scripts/run_radar_job.py --repo owner/repo --analysis-limit 5
@@ -179,14 +153,38 @@ Run radar and send email:
 python3 scripts/run_radar_job.py --repo owner/repo --analysis-limit 5 --send
 ```
 
-Queue and send a digest separately:
+## Configuration
+
+Copy `.env.example` to `.env` and fill only what you need.
+
+LLM configuration is required for extraction and radar analysis:
 
 ```bash
-python3 scripts/enqueue_radar_digest.py --repo owner/repo
-python3 scripts/send_outbox.py
+PCOS_LLM_API_BASE=https://api.openai.com/v1
+PCOS_LLM_API_KEY=...
+PCOS_LLM_MODEL=gpt-4.1
+PCOS_LLM_WIRE_API=responses
 ```
 
-## Project Layout
+GitHub token is optional but recommended:
+
+```bash
+PCOS_GITHUB_TOKEN=...
+```
+
+SMTP is required only for email delivery:
+
+```bash
+PCOS_SMTP_HOST=smtp.example.com
+PCOS_SMTP_USERNAME=...
+PCOS_SMTP_PASSWORD=...
+PCOS_SMTP_FROM=contextos@example.com
+PCOS_SMTP_TO=you@example.com
+```
+
+Do not commit `.env`, local databases, or private evidence.
+
+## Architecture
 
 ```text
 personal_agent/
@@ -194,101 +192,30 @@ personal_agent/
   services/     repository, ingestion, profile derivation, radar, notifications
   config.py     env and .env based settings
   db.py         SQLite connection and schema initialization
-  main.py       FastAPI app entrypoint
-  models.py     Pydantic request/response models
+  models.py     Pydantic models
   schema.sql    SQLite schema
 scripts/
-  init_db.py
   import_private_evidence.py
   extract_evidence_candidates.py
   review_candidates.py
-  enqueue_radar_digest.py
   run_radar_job.py
   send_outbox.py
-tests/
-  pytest coverage
-deploy/
-  systemd/      example service unit
+docs/
+  API and deployment notes
 ```
 
-## API Surface
+More details:
 
-Core:
+- [API reference](./docs/api.md)
+- [Deployment notes](./docs/deployment.md)
 
-- `GET /health`
-- `GET /overview`
+## Design Principles
 
-Ingestion:
-
-- `POST /ingest/extract`
-- `GET /ingest/candidates`
-- `POST /ingest/candidates/{candidate_id}/apply`
-- `POST /ingest/candidates/{candidate_id}/reject`
-
-Profile:
-
-- `GET /profile/summary`
-- `POST /profile/facts`
-- `POST /profile/preferences`
-- `GET /profile/derived`
-- `POST /profile/derived/refresh`
-- `GET /profile/derived/latest`
-
-Personal context:
-
-- `GET /projects`
-- `POST /projects`
-- `GET /artifacts`
-- `POST /artifacts`
-- `GET /notes`
-- `POST /notes`
-- `GET /opportunities`
-- `POST /opportunities`
-- `GET /tasks`
-- `POST /tasks`
-- `GET /policies`
-- `POST /policies`
-
-Radar:
-
-- `POST /radar/sync`
-- `POST /radar/filter`
-- `POST /radar/analyze`
-- `GET /radar/issues`
-- `GET /radar/digest`
-- `POST /radar/run`
-- `POST /radar/mark-alerts`
-
-Ops:
-
-- `GET /ops/services`
-- `POST /ops/services`
-- `POST /ops/services/{service_id}/checks`
-- `POST /ops/services/{service_id}/probe`
-- `POST /ops/probe-all`
-
-## CLI
-
-After editable install:
-
-```bash
-contextos
-```
-
-The short alias also exists:
-
-```bash
-pcos
-```
-
-Examples:
-
-```bash
-pcos home
-pcos project add --slug context-os --title "ContextOS"
-pcos artifact add --project context-os --artifact-type repo --title "GitHub Repo" --url https://github.com/SyaOtiLan/context-os
-pcos capture "Connected profile derivation with issue discovery." --title daily
-```
+- Store evidence first; derive summaries later.
+- Keep raw evidence, candidates, and final structured data separate.
+- Use LLMs for extraction and judgment, not as the source of truth.
+- Prefer deterministic pipeline steps over autonomous agent behavior.
+- Make outputs auditable: candidates, analyses, digest items, and email outbox are stored.
 
 ## Development
 
@@ -304,39 +231,3 @@ Run static checks when dev dependencies are installed:
 ruff check .
 pyright
 ```
-
-## Deployment
-
-Suggested server layout:
-
-```text
-/opt/context-os/
-  personal_agent/
-  scripts/
-  data/
-  .venv/
-```
-
-Bootstrap:
-
-```bash
-python3 -m venv .venv
-.venv/bin/pip install -e .
-.venv/bin/python scripts/init_db.py
-```
-
-Then adapt:
-
-- [`deploy/systemd/context-os.service`](./deploy/systemd/context-os.service)
-
-For scheduled radar emails, run `scripts/run_radar_job.py` from cron or a
-systemd timer.
-
-## Design Notes
-
-- SQLite is the default storage layer.
-- Raw evidence and derived profile snapshots are separate.
-- LLM extraction is review-before-write.
-- Opportunities are treated as top-level inputs, not profile evidence by default.
-- The radar pipeline uses GitHub structured fields first, then limited text heuristics.
-- AI is used as an analysis layer, not as the source of truth.
