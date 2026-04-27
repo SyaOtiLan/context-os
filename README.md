@@ -1,98 +1,82 @@
 # ContextOS
 
-ContextOS is a local-first personal context system for turning facts, projects, artifacts, and goals into actionable recommendations.
+ContextOS is a local-first personal context system that turns evidence about your
+projects, skills, goals, and work history into actionable recommendations.
 
-The current MVP focuses on one practical workflow:
+The current MVP is built around one concrete workflow:
 
 ```text
-raw evidence -> AI extraction candidates -> human confirmation -> derived profile -> GitHub issue sync/filter/analyze -> recommended opportunities
+raw evidence
+-> AI extraction candidates
+-> human review
+-> structured profile/projects/artifacts
+-> derived profile
+-> GitHub issue radar
+-> digest email
 ```
 
-It is not a companion chatbot and it does not depend on a vector database. The core is structured data, explicit rules, SQLite storage, and a small AI layer for issue analysis.
-
-## Current Status
-
-This repo is an early but runnable MVP.
-
-Implemented:
-
-- FastAPI backend backed by SQLite
-- raw evidence storage
-- review-before-write AI ingestion candidates
-- profile facts and preferences
-- rule-based derived profile snapshots
-- projects, artifacts, notes, opportunities, tasks, and policies
-- service registry and health probing
-- GitHub issue synchronization
-- rule-based issue filtering
-- LLM-backed issue analysis using the derived profile
-- digest-style issue recommendation output
-- notification outbox and SMTP sender for radar digests
-- CLI entrypoint for local use
-- pytest coverage for repository, API handlers, profile derivation, ops, CLI, and radar flow
-
-Not implemented yet:
-
-- polished frontend
-- scheduler/cron integration
-- Slack/webhook output layer
-- multi-user support
-- public hosted deployment
+It is not a companion chatbot, not a generic agent framework, and not a vector
+database demo. The core idea is simpler: keep personal context structured,
+reviewable, and useful for real decisions.
 
 ## Why This Exists
 
-The project is built around a simple assumption: personal AI tools are more useful when they are grounded in evidence.
-
-Instead of starting from a vague long-term memory or persona, the system stores concrete records:
-
-- what projects exist
-- what artifacts were produced
-- what facts and preferences are known
-- what opportunities were found
-- what tasks or policies are active
-
-The derived profile is generated from that lower-level data and can then be consumed by tools such as GitHub issue discovery.
-
-## Project Layout
+Finding GitHub issues to work on is not just a search problem. The useful
+question is:
 
 ```text
-personal_agent/
-  api/          FastAPI routers
-  services/     application services, repository, profile derivation, radar pipeline
-  config.py     environment-based settings
-  db.py         SQLite connection and schema initialization
-  main.py       FastAPI app entrypoint
-  models.py     Pydantic request/response models
-  schema.sql    SQLite schema
-scripts/
-  init_db.py    initialize SQLite schema
-  import_private_evidence.py
-  extract_evidence_candidates.py
-  review_candidates.py
-  enqueue_radar_digest.py
-  run_radar_job.py
-  send_outbox.py
-  bootstrap_venv.sh
-tests/          pytest coverage
-data/
-  app.db        default local runtime database
-deploy/
-  systemd/      example service unit
+Which issue is worth doing for me, given what I have built, learned, and want to improve?
 ```
+
+ContextOS answers that by separating evidence from derived conclusions:
+
+- store raw evidence first, such as resumes, project notes, repo summaries, and articles
+- let an LLM extract reviewable candidates
+- confirm or reject candidates before they become official profile data
+- generate a derived profile from confirmed facts and projects
+- use that profile to analyze GitHub issues and send a digest
+
+The system is intentionally conservative: AI output is useful, but it is not the
+source of truth until reviewed.
+
+## Current Status
+
+This is an early but runnable MVP. It has been deployed and used as a replacement
+for a standalone IssueRadar workflow.
+
+Implemented:
+
+- SQLite-backed FastAPI service
+- raw evidence storage
+- review-before-write extraction candidates
+- profile facts, preferences, projects, artifacts, notes, opportunities, tasks, and policies
+- rule-based derived profile snapshots
+- GitHub issue sync, filtering, LLM analysis, and digest generation
+- notification outbox and SMTP email sender
+- local operational scripts for ingestion, review, radar jobs, and email sending
+- `AGENTS.md` for coding agents and maintainers
+- pytest coverage for repository, API handlers, ingestion, profile derivation, radar, notifications, and scripts
+
+Not the focus yet:
+
+- polished frontend
+- multi-user hosting
+- Slack/webhook output
+- vector database/RAG
+- autonomous multi-agent behavior
 
 ## Quick Start
 
-Install the package in editable mode:
+Use Python 3.10+.
 
 ```bash
+git clone https://github.com/SyaOtiLan/context-os.git
+cd context-os
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
-```
-
-Initialize the database:
-
-```bash
+cp .env.example .env
 python3 scripts/init_db.py
+python3 -m pytest -q
 ```
 
 Start the API server:
@@ -101,56 +85,130 @@ Start the API server:
 uvicorn personal_agent.main:app --host 0.0.0.0 --port 5000
 ```
 
-Open the API docs:
+Open:
 
 ```text
 http://127.0.0.1:5000/docs
 ```
 
-The docs page can be used as the first manual UI for the ingestion flow: paste raw text into `/ingest/extract`, review `/ingest/candidates`, then apply or reject candidates.
+If you use a coding agent to set up the repository, ask it to read
+[`AGENTS.md`](./AGENTS.md) first.
 
 ## Configuration
 
-The default database path is `data/app.db`.
+The default local database is:
 
-Useful environment variables:
-
-```bash
-export PCOS_DB_PATH=data/app.db
-export PCOS_GITHUB_TOKEN=...
-export PCOS_LLM_API_BASE=https://api.openai.com/v1
-export PCOS_LLM_API_KEY=...
-export PCOS_LLM_MODEL=...
-export PCOS_LLM_WIRE_API=chat_completions
+```text
+data/app.db
 ```
 
-GitHub sync can run without a token for light usage, but authenticated requests are more reliable.
+Configuration is read from environment variables and from `.env`. Shell
+environment variables take precedence over `.env`.
 
-LLM configuration is required for `/ingest/extract`, `/radar/analyze`, and `/radar/run`.
-
-The environment variable prefix is still `PCOS_` for now.
-
-For OpenAI-compatible Responses API providers, use:
+Minimal local config:
 
 ```bash
-export PCOS_LLM_API_BASE=https://example.com/v1
-export PCOS_LLM_API_KEY=...
-export PCOS_LLM_MODEL=...
-export PCOS_LLM_WIRE_API=responses
-export PCOS_LLM_REASONING_EFFORT=xhigh
-export PCOS_LLM_DISABLE_RESPONSE_STORAGE=true
+PCOS_DB_PATH=data/app.db
 ```
 
-SMTP output for queued email notifications:
+LLM config is required for candidate extraction and issue analysis:
 
 ```bash
-export PCOS_SMTP_HOST=smtp.example.com
-export PCOS_SMTP_PORT=587
-export PCOS_SMTP_USERNAME=...
-export PCOS_SMTP_PASSWORD=...
-export PCOS_SMTP_FROM=contextos@example.com
-export PCOS_SMTP_TO=you@example.com
-export PCOS_SMTP_USE_TLS=true
+PCOS_LLM_API_BASE=https://api.openai.com/v1
+PCOS_LLM_API_KEY=...
+PCOS_LLM_MODEL=gpt-4.1
+PCOS_LLM_WIRE_API=responses
+PCOS_LLM_REASONING_EFFORT=low
+PCOS_LLM_DISABLE_RESPONSE_STORAGE=true
+```
+
+GitHub token is optional but recommended:
+
+```bash
+PCOS_GITHUB_TOKEN=...
+PCOS_GITHUB_ONLY_PRIORITY_LABELS=true
+PCOS_GITHUB_MAX_ISSUE_STALENESS_DAYS=30
+```
+
+SMTP config is required only if you want digest emails:
+
+```bash
+PCOS_SMTP_HOST=smtp.example.com
+PCOS_SMTP_PORT=587
+PCOS_SMTP_USERNAME=...
+PCOS_SMTP_PASSWORD=...
+PCOS_SMTP_FROM=contextos@example.com
+PCOS_SMTP_TO=you@example.com
+PCOS_SMTP_USE_TLS=true
+```
+
+Do not commit `.env`, local databases, or private evidence.
+
+## Core Workflows
+
+Import cleaned private evidence:
+
+```bash
+python3 scripts/import_private_evidence.py
+```
+
+Extract candidates from existing raw evidence:
+
+```bash
+python3 scripts/extract_evidence_candidates.py
+```
+
+Review candidates:
+
+```bash
+python3 scripts/review_candidates.py list
+python3 scripts/review_candidates.py show 1
+python3 scripts/review_candidates.py apply 1
+python3 scripts/review_candidates.py reject 1
+```
+
+Run a full radar job:
+
+```bash
+python3 scripts/run_radar_job.py --repo owner/repo --analysis-limit 5
+```
+
+Run radar and send email:
+
+```bash
+python3 scripts/run_radar_job.py --repo owner/repo --analysis-limit 5 --send
+```
+
+Queue and send a digest separately:
+
+```bash
+python3 scripts/enqueue_radar_digest.py --repo owner/repo
+python3 scripts/send_outbox.py
+```
+
+## Project Layout
+
+```text
+personal_agent/
+  api/          FastAPI routers
+  services/     repository, ingestion, profile derivation, radar, notifications
+  config.py     env and .env based settings
+  db.py         SQLite connection and schema initialization
+  main.py       FastAPI app entrypoint
+  models.py     Pydantic request/response models
+  schema.sql    SQLite schema
+scripts/
+  init_db.py
+  import_private_evidence.py
+  extract_evidence_candidates.py
+  review_candidates.py
+  enqueue_radar_digest.py
+  run_radar_job.py
+  send_outbox.py
+tests/
+  pytest coverage
+deploy/
+  systemd/      example service unit
 ```
 
 ## API Surface
@@ -191,14 +249,6 @@ Personal context:
 - `GET /policies`
 - `POST /policies`
 
-Ops:
-
-- `GET /ops/services`
-- `POST /ops/services`
-- `POST /ops/services/{service_id}/checks`
-- `POST /ops/services/{service_id}/probe`
-- `POST /ops/probe-all`
-
 Radar:
 
 - `POST /radar/sync`
@@ -209,108 +259,35 @@ Radar:
 - `POST /radar/run`
 - `POST /radar/mark-alerts`
 
-## Example Radar Flow
+Ops:
 
-Extract candidates from raw evidence:
-
-```bash
-curl -X POST http://127.0.0.1:5000/ingest/extract \
-  -H 'content-type: application/json' \
-  -d '{"source_type":"manual_text","content":"I am building ContextOS, a personal context system for profile-driven GitHub issue discovery."}'
-```
-
-Review pending candidates:
-
-```bash
-curl 'http://127.0.0.1:5000/ingest/candidates?status=pending'
-```
-
-Apply a confirmed candidate:
-
-```bash
-curl -X POST http://127.0.0.1:5000/ingest/candidates/1/apply
-```
-
-Refresh the derived profile:
-
-```bash
-curl -X POST http://127.0.0.1:5000/profile/derived/refresh
-```
-
-Sync open GitHub issues:
-
-```bash
-curl -X POST http://127.0.0.1:5000/radar/sync \
-  -H 'content-type: application/json' \
-  -d '{"repo":"owner/repo"}'
-```
-
-Apply hard filters:
-
-```bash
-curl -X POST http://127.0.0.1:5000/radar/filter \
-  -H 'content-type: application/json' \
-  -d '{"repo":"owner/repo"}'
-```
-
-Analyze eligible issues with the derived profile:
-
-```bash
-curl -X POST http://127.0.0.1:5000/radar/analyze \
-  -H 'content-type: application/json' \
-  -d '{"repo":"owner/repo","limit":10}'
-```
-
-Read recommendation output:
-
-```bash
-curl 'http://127.0.0.1:5000/radar/digest?repo=owner/repo&lookback_days=3'
-```
-
-Queue and send a digest email locally:
-
-```bash
-python3 scripts/enqueue_radar_digest.py --repo owner/repo
-python3 scripts/send_outbox.py
-```
-
-Run the whole radar job locally:
-
-```bash
-python3 scripts/run_radar_job.py --repo owner/repo --analysis-limit 5
-python3 scripts/run_radar_job.py --repo owner/repo --analysis-limit 5 --send
-```
+- `GET /ops/services`
+- `POST /ops/services`
+- `POST /ops/services/{service_id}/checks`
+- `POST /ops/services/{service_id}/probe`
+- `POST /ops/probe-all`
 
 ## CLI
 
-Run locally with:
-
-```bash
-python -m personal_agent
-```
-
-or after editable install:
+After editable install:
 
 ```bash
 contextos
 ```
 
-The old short alias is also available:
+The short alias also exists:
 
 ```bash
 pcos
 ```
 
-Useful first commands:
+Examples:
 
 ```bash
 pcos home
-pcos project add --slug myagent --title "MyAgent"
-pcos artifact add --project myagent --artifact-type repo --title "GitHub Repo" --url https://github.com/...
-pcos task add --project myagent --title "Wire derived profile into radar"
-pcos capture "Today I connected profile derivation with issue discovery." --title daily
-pcos service add --name issueradar --service-type http --endpoint https://example.com/health
-pcos service probe issueradar
+pcos project add --slug context-os --title "ContextOS"
+pcos artifact add --project context-os --artifact-type repo --title "GitHub Repo" --url https://github.com/SyaOtiLan/context-os
+pcos capture "Connected profile derivation with issue discovery." --title daily
 ```
 
 ## Development
@@ -318,7 +295,7 @@ pcos service probe issueradar
 Run tests:
 
 ```bash
-python3 -m pytest
+python3 -m pytest -q
 ```
 
 Run static checks when dev dependencies are installed:
@@ -340,7 +317,7 @@ Suggested server layout:
   .venv/
 ```
 
-Bootstrap on the server:
+Bootstrap:
 
 ```bash
 python3 -m venv .venv
@@ -352,11 +329,14 @@ Then adapt:
 
 - [`deploy/systemd/context-os.service`](./deploy/systemd/context-os.service)
 
+For scheduled radar emails, run `scripts/run_radar_job.py` from cron or a
+systemd timer.
+
 ## Design Notes
 
 - SQLite is the default storage layer.
-- AI ingestion is review-before-write: extraction creates candidates, not final facts.
-- Raw facts and derived profile snapshots are kept separate.
+- Raw evidence and derived profile snapshots are separate.
+- LLM extraction is review-before-write.
 - Opportunities are treated as top-level inputs, not profile evidence by default.
 - The radar pipeline uses GitHub structured fields first, then limited text heuristics.
-- AI is used as an analysis layer, not as the source of truth for the system.
+- AI is used as an analysis layer, not as the source of truth.
