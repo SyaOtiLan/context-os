@@ -11,6 +11,10 @@ class LLMNotConfiguredError(RuntimeError):
     pass
 
 
+class LLMAPIError(RuntimeError):
+    pass
+
+
 class LLMService:
     def __init__(self) -> None:
         if not settings.llm_api_base or not settings.llm_api_key or not settings.llm_model:
@@ -59,7 +63,7 @@ class LLMService:
             timeout=self.timeout_seconds,
         )
         response.raise_for_status()
-        payload = response.json()
+        payload = _parse_json_response(response)
         choices = payload.get("choices") or []
         if not choices:
             raise RuntimeError("LLM returned no choices")
@@ -96,11 +100,24 @@ class LLMService:
             timeout=self.timeout_seconds,
         )
         response.raise_for_status()
-        payload = response.json()
+        payload = _parse_json_response(response)
         content = _extract_responses_text(payload)
         if not content:
             raise RuntimeError("LLM returned an empty response")
         return content.strip()
+
+
+def _parse_json_response(response: requests.Response) -> dict[str, Any]:
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        snippet = response.text[:300].replace("\n", " ")
+        raise LLMAPIError(
+            f"LLM returned non-JSON response: status={response.status_code}, body={snippet!r}"
+        ) from exc
+    if not isinstance(payload, dict):
+        raise LLMAPIError("LLM returned JSON, but the top-level payload is not an object")
+    return payload
 
 
 def _extract_responses_text(payload: dict[str, Any]) -> str:

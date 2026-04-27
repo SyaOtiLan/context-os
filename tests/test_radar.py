@@ -9,6 +9,7 @@ from personal_agent.services.issue_radar import (
     IssueFilterService,
     RadarDigestService,
     RadarNotificationService,
+    RadarOutboxService,
     RadarPipelineService,
 )
 from personal_agent.services.profile_derivation import ProfileDerivationService
@@ -199,6 +200,43 @@ def test_build_digest_sections_splits_recommended_and_screened_out(repository) -
     assert digest.screened_out[0].issue_number == 102
 
 
+def test_digest_keeps_old_issue_when_recently_updated_and_analyzed(repository) -> None:
+    now = datetime.now(timezone.utc)
+    repository.upsert_profile_fact(ProfileFactCreate(category="career", key="target_role", value="backend"))
+    repository.upsert_github_issue(
+        GitHubIssueCreate(
+            repo="example/repo",
+            issue_number=101,
+            title="Improve error message",
+            url="https://github.com/example/repo/issues/101",
+            state="open",
+            labels=["good first issue"],
+            assignees=[],
+            author="alice",
+            body="Please improve this error message and add tests.",
+            created_at=now - timedelta(days=500),
+            updated_at=now - timedelta(days=1),
+            fetched_at=now,
+        )
+    )
+    IssueFilterService(repository).apply_filters(repo="example/repo")
+    profile_service = ProfileDerivationService(repository)
+    profile_service.build_and_store_profile()
+    IssueAnalysisService(
+        repository=repository,
+        profile_service=profile_service,
+        llm_service=FakeLLMService(),
+    ).analyze_eligible_issues(repo="example/repo")
+
+    digest = RadarDigestService(repository).build_digest_sections(
+        repo="example/repo",
+        lookback_days=3,
+    )
+
+    assert len(digest.recommended) == 1
+    assert digest.recommended[0].issue_number == 101
+
+
 def test_mark_new_issue_alerts_deduplicates_notifications(repository) -> None:
     now = datetime.now(timezone.utc)
     repository.upsert_profile_fact(ProfileFactCreate(category="career", key="target_role", value="backend"))
@@ -235,6 +273,44 @@ def test_mark_new_issue_alerts_deduplicates_notifications(repository) -> None:
     assert first == 1
     assert second == 0
     assert notifications[0].issue_id == issue.id
+
+
+def test_radar_outbox_enqueues_digest_email(repository) -> None:
+    now = datetime.now(timezone.utc)
+    repository.upsert_profile_fact(ProfileFactCreate(category="career", key="target_role", value="backend"))
+    repository.upsert_github_issue(
+        GitHubIssueCreate(
+            repo="example/repo",
+            issue_number=101,
+            title="Improve error message",
+            url="https://github.com/example/repo/issues/101",
+            state="open",
+            labels=["good first issue"],
+            assignees=[],
+            author="alice",
+            body="Please improve this error message and add tests.",
+            created_at=now - timedelta(days=1),
+            updated_at=now - timedelta(days=1),
+            fetched_at=now,
+        )
+    )
+    IssueFilterService(repository).apply_filters(repo="example/repo")
+    profile_service = ProfileDerivationService(repository)
+    profile_service.build_and_store_profile()
+    IssueAnalysisService(
+        repository=repository,
+        profile_service=profile_service,
+        llm_service=FakeLLMService(),
+    ).analyze_eligible_issues(repo="example/repo")
+
+    item = RadarOutboxService(repository).enqueue_digest(repo="example/repo")
+    pending = repository.list_notification_outbox_items(status="pending")
+
+    assert item.channel == "email"
+    assert item.subject == "[ContextOS Radar] example/repo: 1 digest items"
+    assert "Improve error message" in item.body
+    assert item.payload["recommended"] == 1
+    assert pending[0].id == item.id
 
 
 def test_pipeline_runs_full_chain(repository) -> None:

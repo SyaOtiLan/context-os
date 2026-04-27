@@ -27,6 +27,7 @@ Implemented:
 - rule-based issue filtering
 - LLM-backed issue analysis using the derived profile
 - digest-style issue recommendation output
+- notification outbox and SMTP sender for radar digests
 - CLI entrypoint for local use
 - pytest coverage for repository, API handlers, profile derivation, ops, CLI, and radar flow
 
@@ -34,7 +35,7 @@ Not implemented yet:
 
 - polished frontend
 - scheduler/cron integration
-- email/Slack/notification output layer
+- Slack/webhook output layer
 - multi-user support
 - public hosted deployment
 
@@ -65,6 +66,11 @@ personal_agent/
   schema.sql    SQLite schema
 scripts/
   init_db.py    initialize SQLite schema
+  import_private_evidence.py
+  extract_evidence_candidates.py
+  review_candidates.py
+  enqueue_radar_digest.py
+  send_outbox.py
   bootstrap_venv.sh
 tests/          pytest coverage
 data/
@@ -132,6 +138,18 @@ export PCOS_LLM_MODEL=...
 export PCOS_LLM_WIRE_API=responses
 export PCOS_LLM_REASONING_EFFORT=xhigh
 export PCOS_LLM_DISABLE_RESPONSE_STORAGE=true
+```
+
+SMTP output for queued email notifications:
+
+```bash
+export PCOS_SMTP_HOST=smtp.example.com
+export PCOS_SMTP_PORT=587
+export PCOS_SMTP_USERNAME=...
+export PCOS_SMTP_PASSWORD=...
+export PCOS_SMTP_FROM=contextos@example.com
+export PCOS_SMTP_TO=you@example.com
+export PCOS_SMTP_USE_TLS=true
 ```
 
 ## API Surface
@@ -246,6 +264,13 @@ Read recommendation output:
 
 ```bash
 curl 'http://127.0.0.1:5000/radar/digest?repo=owner/repo&lookback_days=3'
+```
+
+Queue and send a digest email locally:
+
+```bash
+python3 scripts/enqueue_radar_digest.py --repo owner/repo
+python3 scripts/send_outbox.py
 ```
 
 ## CLI

@@ -23,6 +23,8 @@ from personal_agent.models import (
     GitHubIssueView,
     Note,
     NoteCreate,
+    NotificationOutboxCreate,
+    NotificationOutboxItem,
     Opportunity,
     OpportunityCreate,
     Policy,
@@ -153,6 +155,12 @@ def _row_to_github_issue_analysis(row: Row) -> GitHubIssueAnalysis:
 
 def _row_to_github_issue_notification(row: Row) -> GitHubIssueNotification:
     return GitHubIssueNotification(**dict(row))
+
+
+def _row_to_notification_outbox_item(row: Row) -> NotificationOutboxItem:
+    data = dict(row)
+    data["payload"] = _json_loads(data.pop("payload_json")) or {}
+    return NotificationOutboxItem(**data)
 
 
 def _row_to_profile_snapshot(row: Row) -> DerivedProfileSnapshot:
@@ -561,6 +569,99 @@ class Repository:
         with get_connection() as connection:
             rows = connection.execute(query, params).fetchall()
         return [_row_to_github_issue_notification(row) for row in rows]
+
+    def create_notification_outbox_item(
+        self,
+        payload: NotificationOutboxCreate,
+    ) -> NotificationOutboxItem:
+        with get_connection() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO notification_outbox (channel, subject, body, payload_json)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    payload.channel,
+                    payload.subject,
+                    payload.body,
+                    json.dumps(payload.payload),
+                ),
+            )
+            row = connection.execute(
+                "SELECT * FROM notification_outbox WHERE id = ?",
+                (cursor.lastrowid,),
+            ).fetchone()
+        return _row_to_notification_outbox_item(row)
+
+    def list_notification_outbox_items(
+        self,
+        status: str | None = None,
+        channel: str | None = None,
+        limit: int = 20,
+    ) -> list[NotificationOutboxItem]:
+        query = "SELECT * FROM notification_outbox"
+        conditions: list[str] = []
+        params: list[object] = []
+        if status:
+            conditions.append("status = ?")
+            params.append(status)
+        if channel:
+            conditions.append("channel = ?")
+            params.append(channel)
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        query += " ORDER BY created_at ASC, id ASC"
+        if limit:
+            query += " LIMIT ?"
+            params.append(limit)
+        with get_connection() as connection:
+            rows = connection.execute(query, tuple(params)).fetchall()
+        return [_row_to_notification_outbox_item(row) for row in rows]
+
+    def mark_notification_outbox_sent(
+        self,
+        item_id: int,
+        sent_at: datetime,
+    ) -> NotificationOutboxItem:
+        with get_connection() as connection:
+            connection.execute(
+                """
+                UPDATE notification_outbox
+                SET status = 'sent',
+                    sent_at = ?,
+                    error = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (serialize_timestamp(sent_at), item_id),
+            )
+            row = connection.execute(
+                "SELECT * FROM notification_outbox WHERE id = ?",
+                (item_id,),
+            ).fetchone()
+        return _row_to_notification_outbox_item(_require_row(row, "notification_outbox", item_id))
+
+    def mark_notification_outbox_failed(
+        self,
+        item_id: int,
+        error: str,
+    ) -> NotificationOutboxItem:
+        with get_connection() as connection:
+            connection.execute(
+                """
+                UPDATE notification_outbox
+                SET status = 'failed',
+                    error = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (error, item_id),
+            )
+            row = connection.execute(
+                "SELECT * FROM notification_outbox WHERE id = ?",
+                (item_id,),
+            ).fetchone()
+        return _row_to_notification_outbox_item(_require_row(row, "notification_outbox", item_id))
 
     def list_github_issue_views(
         self,

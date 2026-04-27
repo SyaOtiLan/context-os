@@ -343,6 +343,26 @@ class RadarPipelineSummary(BaseModel):
     digest_item_count: int
 
 
+class NotificationOutboxCreate(BaseModel):
+    channel: str
+    subject: str
+    body: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class NotificationOutboxItem(BaseModel):
+    id: int
+    channel: str
+    subject: str
+    body: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    status: str
+    error: str | None = None
+    created_at: str
+    updated_at: str
+    sent_at: str | None = None
+
+
 class NoteCreate(BaseModel):
     kind: str = "note"
     title: str | None = None

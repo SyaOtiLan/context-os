@@ -17,6 +17,8 @@ from personal_agent.models import (
     GitHubIssueFilterResultCreate,
     GitHubIssueFilterSummary,
     GitHubIssueNotificationCreate,
+    NotificationOutboxCreate,
+    NotificationOutboxItem,
     RadarDigestSections,
     RadarPipelineSummary,
     RadarRecommendedItem,
@@ -357,6 +359,18 @@ def humanize_reason_code(code: str) -> str:
     return REASON_LABELS.get(code, code.replace("_", " "))
 
 
+def _digest_reference_time(view) -> datetime:
+    issue_updated_at = parse_timestamp(view.issue.updated_at) or datetime.min.replace(
+        tzinfo=timezone.utc
+    )
+    if view.analysis is None:
+        return issue_updated_at
+    analyzed_at = parse_timestamp(view.analysis.analyzed_at) or datetime.min.replace(
+        tzinfo=timezone.utc
+    )
+    return max(issue_updated_at, analyzed_at)
+
+
 class RadarDigestService:
     def __init__(self, repository: Repository | None = None) -> None:
         self.repository = repository or Repository()
@@ -375,10 +389,7 @@ class RadarDigestService:
         screened_out: list[RadarScreenedOutItem] = []
 
         for view in views:
-            created_at = parse_timestamp(view.issue.created_at) or datetime.min.replace(
-                tzinfo=timezone.utc
-            )
-            if created_at < cutoff:
+            if _digest_reference_time(view) < cutoff:
                 continue
             if view.analysis and view.filter_result and view.filter_result.eligible:
                 if view.analysis.should_notify:
@@ -475,6 +486,95 @@ class RadarNotificationService:
             if limit and sent >= limit:
                 break
         return sent
+
+
+def _format_digest_body(sections: RadarDigestSections) -> str:
+    lines = [
+        "ContextOS IssueRadar Digest",
+        f"Generated at: {sections.generated_at}",
+        f"Lookback days: {sections.lookback_days}",
+        "",
+        f"Recommended ({len(sections.recommended)})",
+    ]
+    for item in sections.recommended:
+        lines.extend(
+            [
+                f"- {item.repo}#{item.issue_number} [{item.fit_score}/10, {item.difficulty}] {item.title}",
+                f"  {item.url}",
+                f"  Why fit: {item.why_fit}",
+                f"  Blockers: {item.likely_blockers}",
+                f"  First step: {item.first_step}",
+            ]
+        )
+
+    lines.extend(["", f"Watchlist ({len(sections.watchlist)})"])
+    for item in sections.watchlist:
+        lines.extend(
+            [
+                f"- {item.repo}#{item.issue_number} [{item.fit_score}/10, {item.difficulty}] {item.title}",
+                f"  {item.url}",
+                f"  Why fit: {item.why_fit}",
+                f"  Why not: {item.why_not_fit}",
+            ]
+        )
+
+    lines.extend(["", f"Screened out ({len(sections.screened_out)})"])
+    for item in sections.screened_out:
+        reason = ", ".join(item.reason_labels) or "No reason recorded"
+        lines.extend(
+            [
+                f"- {item.repo}#{item.issue_number} {item.title}",
+                f"  {item.url}",
+                f"  Reasons: {reason}",
+            ]
+        )
+
+    return "\n".join(lines).strip() + "\n"
+
+
+class RadarOutboxService:
+    def __init__(
+        self,
+        repository: Repository | None = None,
+        digest_service: RadarDigestService | None = None,
+    ) -> None:
+        self.repository = repository or Repository()
+        self.digest_service = digest_service or RadarDigestService(self.repository)
+
+    def enqueue_digest(
+        self,
+        repo: str | None = None,
+        lookback_days: int = 3,
+        limit: int | None = None,
+    ) -> NotificationOutboxItem:
+        sections = self.digest_service.build_digest_sections(
+            repo=repo,
+            lookback_days=lookback_days,
+            limit=limit,
+        )
+        total = (
+            len(sections.recommended)
+            + len(sections.watchlist)
+            + len(sections.screened_out)
+        )
+        subject_repo = repo or "all repos"
+        subject = f"[ContextOS Radar] {subject_repo}: {total} digest items"
+        return self.repository.create_notification_outbox_item(
+            NotificationOutboxCreate(
+                channel="email",
+                subject=subject,
+                body=_format_digest_body(sections),
+                payload={
+                    "type": "radar_digest",
+                    "repo": repo,
+                    "lookback_days": lookback_days,
+                    "recommended": len(sections.recommended),
+                    "watchlist": len(sections.watchlist),
+                    "screened_out": len(sections.screened_out),
+                    "generated_at": sections.generated_at,
+                },
+            )
+        )
 
 
 class RadarPipelineService:

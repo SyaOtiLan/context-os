@@ -202,6 +202,22 @@ CREATE TABLE IF NOT EXISTS github_issue_notifications (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_github_issue_notifications_issue_type
 ON github_issue_notifications(issue_id, notification_type);
 
+CREATE TABLE IF NOT EXISTS notification_outbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    body TEXT NOT NULL,
+    payload_json TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    error TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    sent_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_notification_outbox_status
+ON notification_outbox(status, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
