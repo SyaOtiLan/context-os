@@ -33,7 +33,7 @@ public class MainActivity extends Activity {
         settings.setDatabaseEnabled(true);
         settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        settings.setUseWideViewPort(false);
+        settings.setUseWideViewPort(true);
         settings.setLoadWithOverviewMode(false);
         settings.setSupportZoom(false);
         settings.setBuiltInZoomControls(false);
@@ -59,7 +59,7 @@ public class MainActivity extends Activity {
         });
         webView.setWebChromeClient(new WebChromeClient());
         webView.clearCache(true);
-        webView.loadUrl("http://47.108.145.21:5000/ui/code?app=android&v=20260603b");
+        webView.loadUrl("http://47.108.145.21:5000/ui/code?app=android&v=20260603c");
     }
 
     @Override
